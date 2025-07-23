@@ -1,3 +1,4 @@
+// --- 全局变量 ---
 let mic;
 let vol = 0;
 let smoothedVol = 0; // 用于平滑处理音量，减少抖动
@@ -7,13 +8,19 @@ let firstImages = []; // 开头待机动画
 let guessImages = []; // 主交互动画（帘子）
 let endImages = [];   // 结尾动画
 
+// --- 新增：加载状态诊断变量 ---
+let loadedCount = 0;
+let totalImages = 19 + 15 + 12; // 所有图片的总数
+let loadError = false; // 标记是否加载出错
+let failedFiles = []; // 记录加载失败的文件名
+
 // --- 状态控制变量 ---
 let state = "intro"; // 可选状态: "intro", "main", "end"
 let currentFrame = 0;
 let lastFrameTime = 0;
 
 // --- 动画速度控制 (数值越大，播放越慢) ---
-const introFrameSpeed = 250; // 开头动画速度
+const introFrameSpeed = 200; // 开头动画速度
 const endFrameSpeed = 120;   // 结尾动画速度
 
 // --- 麦克风灵敏度控制 ---
@@ -21,22 +28,34 @@ const micThreshold = 0.03;      // 判定交互开始的最低音量
 const maxBlowVolume = 0.5;      // 吹气要达到这个音量才能把帘子吹到最高
 
 function preload() {
+  // 定义一个统一的加载函数，用于诊断错误
+  const loadImageWithCallback = (path) => {
+    return loadImage(path, 
+      () => { loadedCount++; }, // 成功时，计数器+1
+      () => { 
+        loadError = true; 
+        failedFiles.push(path); // 记录失败的文件名
+        console.error(`错误：图片 "${path}" 加载失败！请仔细检查文件名和大小写。`); 
+      }
+    );
+  };
+
   // 加载开头动画
   for (let i = 1; i <= 19; i++) {
     let filename = `first-${String(i).padStart(2, '0')}.png`;
-    firstImages.push(loadImage(filename));
+    firstImages.push(loadImageWithCallback(filename));
   }
 
   // 加载主交互动画（帘子）
   for (let i = 1; i <= 15; i++) {
     let filename = `guess-${String(i).padStart(2, '0')}.png`;
-    guessImages.push(loadImage(filename));
+    guessImages.push(loadImageWithCallback(filename));
   }
 
   // 加载结尾动画
-  for (let i = 1; i <= 9; i++) {
+  for (let i = 1; i <= 12; i++) {
     let filename = `end-${String(i).padStart(2, '0')}.png`;
-    endImages.push(loadImage(filename));
+    endImages.push(loadImageWithCallback(filename));
   }
 }
 
@@ -48,65 +67,68 @@ function setup() {
 }
 
 function draw() {
+  // 在所有图片加载完成前，一直显示加载画面
+  if (loadedCount < totalImages) {
+    background(255);
+    textAlign(CENTER, CENTER);
+    textSize(24);
+    
+    if (loadError) {
+      fill(255, 0, 0);
+      // 在屏幕上明确指出错误
+      text(`图片加载失败！\n请检查以下文件是否存在并且文件名正确：\n${failedFiles.join('\n')}`, width / 2, height / 2);
+      noLoop(); // 出错了就停止
+    } else {
+      fill(0);
+      text(`正在加载图片... (${loadedCount} / ${totalImages})`, width / 2, height / 2);
+    }
+    return; // 在加载完成前，不执行下面的交互代码
+  }
+  
+  // --- 主程序逻辑 ---
   background(255);
-  // 使用 lerp 函数对音量进行平滑处理，能有效过滤瞬间的杂音
   vol = mic.getLevel();
   smoothedVol = lerp(smoothedVol, vol, 0.2);
-  
   let now = millis();
 
-  // --- 状态机逻辑 ---
-
   if (state === "intro") {
-    // 状态一：播放开头/待机动画
     if (now - lastFrameTime > introFrameSpeed) {
       currentFrame = (currentFrame + 1) % firstImages.length;
       lastFrameTime = now;
     }
     showImage(firstImages[currentFrame]);
 
-    // 如果检测到吹气，则切换到主交互状态
     if (smoothedVol > micThreshold) {
       state = "main";
-      currentFrame = 0; // 重置帧计数器
+      currentFrame = 0;
     }
   } 
-
   else if (state === "main") {
-    // 状态二：主交互过程，根据吹气强度显示帘子高度
     let frameIndex = map(smoothedVol, micThreshold, maxBlowVolume, 0, guessImages.length - 1, true);
     currentFrame = floor(frameIndex);
-    
     showImage(guessImages[currentFrame]);
 
-    // 如果帘子被吹到最高（即动画播放到最后一帧），则切换到结尾动画状态
     if (currentFrame >= guessImages.length - 1) {
       state = "end";
-      currentFrame = 0; // 为结尾动画重置帧数
+      currentFrame = 0;
       lastFrameTime = now;
     }
     
-    // 如果停止吹气，则回到待机状态
     if (smoothedVol < micThreshold) {
-        state = "intro";
-        currentFrame = 0;
+      state = "intro";
+      currentFrame = 0;
     }
   } 
-
   else if (state === "end") {
-    // 状态三：播放结尾动画
     if (now - lastFrameTime > endFrameSpeed) {
       currentFrame++;
       lastFrameTime = now;
     }
     
-    // 检查动画是否播放完毕
     if (currentFrame >= endImages.length) {
-      // 如果是，则重置状态，下一帧将播放开头动画
       state = "intro";
       currentFrame = 0;
     } else {
-      // 如果还没结束，则显示当前结尾动画的帧
       showImage(endImages[currentFrame]);
     }
   }
