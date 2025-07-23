@@ -10,7 +10,7 @@ let endImages = [];   // 结尾动画
 
 // --- 新增：加载状态诊断变量 ---
 let loadedCount = 0;
-let totalImages = 19 + 15 + 12; // 所有图片的总数
+let totalImages = 19 + 15 + 9; // 所有图片的总数
 let loadError = false; // 标记是否加载出错
 let failedFiles = []; // 记录加载失败的文件名
 
@@ -53,7 +53,7 @@ function preload() {
   }
 
   // 加载结尾动画
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 1; i <= 9; i++) {
     let filename = `end-${String(i).padStart(2, '0')}.png`;
     endImages.push(loadImageWithCallback(filename));
   }
