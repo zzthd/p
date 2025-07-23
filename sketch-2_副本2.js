@@ -1,41 +1,34 @@
-// --- 全局变量 ---
 let mic;
 let vol = 0;
-let smoothedVol = 0; // 用于平滑处理音量，减少抖动
 
-// 存放三组动画的数组
-let firstImages = []; // 开头待机动画
-let guessImages = []; // 主交互动画（帘子）
-let endImages = [];   // 结尾动画
+let firstImages = [];
+let guessImages = [];
+let endImages = [];
 
-// --- 状态控制变量 ---
-let state = "intro"; // 可选状态: "intro", "main", "end"
-let currentFrame = 0;
+let state = 'idle'; // 可为 'idle'（待机）| 'guess'（主图）| 'end'（结尾）
+let idleIndex = 0;
+let endIndex = 0;
 let lastFrameTime = 0;
+let currentGuessIndex = 0;
 
-// --- 动画速度控制 (数值越大，播放越慢) ---
-const introFrameSpeed = 200; // 开头动画速度
-const endFrameSpeed = 120;   // 结尾动画速度
-
-// --- 麦克风灵敏度控制 ---
-const micThreshold = 0.03;      // 判定交互开始的最低音量
-const maxBlowVolume = 0.5;      // 吹气要达到这个音量才能把帘子吹到最高
+const idleSpeed = 150; // 每帧间隔 ms
+const endSpeed = 150;
+const micThreshold = 0.03;
+const activeThreshold = 3;
+let activeCount = 0;
+let idleToEndTimer = 0;
+const idleToEndDelay = 1000; // 停止吹气后 1 秒触发结束动画
 
 function preload() {
-  // 加载开头动画
   for (let i = 1; i <= 19; i++) {
     let filename = `first-${String(i).padStart(2, '0')}.png`;
     firstImages.push(loadImage(filename));
   }
-
-  // 加载主交互动画（帘子）
   for (let i = 1; i <= 15; i++) {
     let filename = `guess-${String(i).padStart(2, '0')}.png`;
     guessImages.push(loadImage(filename));
   }
-
-  // 加载结尾动画
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 1; i <= 9; i++) {
     let filename = `end-${String(i).padStart(2, '0')}.png`;
     endImages.push(loadImage(filename));
   }
@@ -46,79 +39,72 @@ function setup() {
   mic = new p5.AudioIn();
   mic.start();
   imageMode(CENTER);
+  frameRate(30);
 }
 
 function draw() {
   background(255);
-  // 使用 lerp 函数对音量进行平滑处理，能有效过滤瞬间的杂音
   vol = mic.getLevel();
-  smoothedVol = lerp(smoothedVol, vol, 0.2);
-  
-  let now = millis();
 
-  // --- 状态机逻辑 ---
+  // 检测持续吹气
+  if (vol > micThreshold) {
+    activeCount++;
+    idleToEndTimer = millis(); // 重置不吹气计时器
+  } else {
+    activeCount = 0;
+  }
 
-  if (state === "intro") {
-    // 状态一：播放开头/待机动画
-    if (now - lastFrameTime > introFrameSpeed) {
-      currentFrame = (currentFrame + 1) % firstImages.length;
+  const now = millis();
+
+  // ================== 状态控制 ==================
+  if (state === 'idle') {
+    if (now - lastFrameTime > idleSpeed) {
+      idleIndex = (idleIndex + 1) % firstImages.length;
       lastFrameTime = now;
     }
-    showImage(firstImages[currentFrame]);
 
-    // 如果检测到吹气，则切换到主交互状态
-    if (smoothedVol > micThreshold) {
-      state = "main";
-      currentFrame = 0; // 重置帧计数器
-    }
-  } 
-
-  else if (state === "main") {
-    // 状态二：主交互过程，根据吹气强度显示帘子高度
-    let frameIndex = map(smoothedVol, micThreshold, maxBlowVolume, 0, guessImages.length - 1, true);
-    currentFrame = floor(frameIndex);
-    
-    showImage(guessImages[currentFrame]);
-
-    // 如果帘子被吹到最高（即动画播放到最后一帧），则切换到结尾动画状态
-    if (currentFrame >= guessImages.length - 1) {
-      state = "end";
-      currentFrame = 0; // 为结尾动画重置帧数
-      lastFrameTime = now;
-    }
-    
-    // 如果停止吹气，则回到待机状态
-    if (smoothedVol < micThreshold) {
-        state = "intro";
-        currentFrame = 0;
-    }
-  } 
-
-  else if (state === "end") {
-    // 状态三：播放结尾动画
-    if (now - lastFrameTime > endFrameSpeed) {
-      currentFrame++;
-      lastFrameTime = now;
-    }
-    
-    // 检查动画是否播放完毕
-    if (currentFrame >= endImages.length) {
-      // 如果是，则重置状态，下一帧将播放开头动画
-      state = "intro";
-      currentFrame = 0;
-    } else {
-      // 如果还没结束，则显示当前结尾动画的帧
-      showImage(endImages[currentFrame]);
+    if (activeCount >= activeThreshold) {
+      state = 'guess';
     }
   }
-}
 
-// 统一的图像显示函数
-function showImage(img) {
+  else if (state === 'guess') {
+    // 计算当前音量对应的 guess 图索引
+    let guessIndex = floor(map(vol, 0.01, 0.3, 0, 14, true));
+    currentGuessIndex = guessIndex;
+
+    // 若 1 秒内没吹，切到 end 动画
+    if (now - idleToEndTimer > idleToEndDelay) {
+      state = 'end';
+      endIndex = 0;
+      lastFrameTime = now;
+    }
+  }
+
+  else if (state === 'end') {
+    if (now - lastFrameTime > endSpeed) {
+      endIndex++;
+      lastFrameTime = now;
+
+      if (endIndex >= endImages.length) {
+        state = 'idle';
+        idleIndex = 0;
+      }
+    }
+  }
+
+  // ================== 显示图像 ==================
+  let img;
+  if (state === 'idle') {
+    img = firstImages[idleIndex];
+  } else if (state === 'guess') {
+    img = guessImages[currentGuessIndex];
+  } else if (state === 'end') {
+    img = endImages[endIndex];
+  }
+
   if (img && img.width > 0) {
-    let scaleFactor = min(width / img.width, height / img.height);
-    let w = img.width * scaleFactor;
-    let h = img.height * scaleFactor;
-    image(img, width / 2, height / 2, w, h);
+    let scaleFactor = min(width / img.width, height / img.height) * 0.9;
+    image(img, width / 2, height / 2, img.width * scaleFactor, img.height * scaleFactor);
   }
 }
