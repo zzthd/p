@@ -1,4 +1,3 @@
-// --- 全局变量 ---
 let mic;
 let vol = 0;
 let smoothedVol = 0; // 用于平滑处理音量，减少抖动
