@@ -14,7 +14,7 @@ let currentFrame = 0;
 let lastFrameTime = 0;
 
 // --- 动画速度控制 (数值越大，播放越慢) ---
-const introFrameSpeed = 200; // 开头动画速度
+const introFrameSpeed = 250; // 开头动画速度
 const endFrameSpeed = 120;   // 结尾动画速度
 
 // --- 麦克风灵敏度控制 ---
@@ -35,7 +35,7 @@ function preload() {
   }
 
   // 加载结尾动画
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 1; i <= 9; i++) {
     let filename = `end-${String(i).padStart(2, '0')}.png`;
     endImages.push(loadImage(filename));
   }
